@@ -1,4 +1,5 @@
 
+import dill
 import time
 
 from datetime import datetime
@@ -20,5 +21,20 @@ class CodeTraceUtils:
         return result, time_start, time_end, function_end - function_start
     
     @staticmethod
-    def print_logs(func_name: str, time_start: datetime, time_end: datetime, duration: float):
-        print(f"[CodeTrace] Function {func_name} Start at {time_start}, End at {time_end}, Time use: {duration}")
+    def print_logs(func_name: str, time_start: datetime, time_end: datetime, duration: float, return_type: type | None):
+        print(f"[CodeTrace] Function {func_name} Start at {time_start}, End at {time_end}, Time use: {duration}, Return Type: {return_type}")
+
+
+class CodeTraceFile:
+    def __init__(self) -> None:
+        pass
+
+
+    @staticmethod
+    def save_input(save_to: str, auto_create_path: bool, param: dict):
+        pass
+
+
+    @staticmethod
+    def save_result(save_to: str, auto_create_path: bool, result: Any):
+        pass
