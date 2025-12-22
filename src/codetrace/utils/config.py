@@ -78,6 +78,14 @@ class CodeTraceConfig:
             raise AttributeError("The value `sub_path` is a final attribute variable.")
         self._sub_path = value
 
+    # The excuted summary and record.
+    # This will save into a file and print when exit the program.
+    with_summary: bool = True # !! NOTE: Can only set in config function.
+
+    # Default dirs the summary save into path
+    # The all summary will save into this path and name with {timestamp}.json
+    summary_dir: str = "summarys" # !! NOTE: Can only set in config function.
+
     def copy(self) -> "CodeTraceConfig":
         """Copy function
 
