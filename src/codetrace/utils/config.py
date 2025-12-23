@@ -1,97 +1,108 @@
 # -*- coding: utf-8 -*-
-"""Default configuration module.
+"""Default configuration module for the CodeTrace Library.
 
-Docstring for codetrace.utils.config
+This module defines the global configuration settings, timestamps, and the 
+CodeTraceConfig dataclass used to control the behavior of tracing, logging,
+and data persistence.
 """
 
 import copy
 
+from typing import List
 from datetime import datetime
 from dataclasses import dataclass, field
 
-from typing import List
-
 from ..persistence.data_persistence import SupportedType
 
-# The format of the timestamp, ex: 20250230_256161
+# The format of the timestamp, e.g., 20250230_256161.
 TIMESTAMP_FORMAT: str = "%Y%m%d_%H%M%S"
+
 # The current timestamp for each program run.
-# This timestamp only generate one times for every run.
+# Generated once per execution.
 TIMESTAMP       : str = datetime.now().strftime(TIMESTAMP_FORMAT)
-# The default name for all config
-# Ex: logger, filepath, etc.
+
+# The default name prefix for various outputs like loggers and file paths.
 DEFAULT_NAME    : str = "codetrace"
 
 @dataclass
 class CodeTraceConfig:
-    """Docstring for CodeTraceConfig
+    """Configuration settings for CodeTrace execution and persistence.
+
+    Attributes:
+        with_logs        (bool)         : Whether to enable logging. If `True`, logs at **DEBUG** level;
+                                        Otherwise, logs at **WARNING** level.
+        save_logs        (bool)         : If `True`, saves runtime logs to a local file.
+                                        *!! NOTE: This attribute can only be set at config function.*
+        logs_dir         (str)          : Directory path where log files are stored.
+                                        *!! NOTE: This attribute can only be set at config function.*
+        save_inputs      (bool)         : Whether to persist function arguments.
+        save_result      (bool)         : Whether to persist function return values.
+        save_to          (str)          : Root directory for saving all trace outputs.
+                                        *!! NOTE: This attribute can only be set at config function.*
+        inputs_file_name (str)          : Base filename for persisted input data.
+        result_file_name (List[str])    : A list containing filenames for original and new function
+                                        results (used in comparison modes.)
+        data_format      (SupportedType): The format used for data persistence (e.g., Pickle).
+                                        *!! NOTE: This attribute can only be set at config function.*
+        with_summary     (bool)         : Whether to generate and print an execution summary.
+                                        *!! NOTE: This attribute can only be set at config function.*
+        summary_dir      (str)          : Directory path where summary `JSON` files are stored.
+                                        *!! NOTE: This attribute can only be set at config function.*
     """
 
-    # When True , the decorator will log `debug`   level messages
-    # When False, the decorator will log `warning` level messages
+    # Logging Configuration
     with_logs: bool = True
+    save_logs: bool = False   # !! NOTE: Can only be set in config function.
+    logs_dir : str  = ".logs" # !! NOTE: Can only be set in config fucntion.
 
-    # Save the runtime log to local
-    # The file will same as the terminal output.
-    save_logs: bool = False # !! NOTE: Can only set in config function.
-
-    # The logfile directory
-    # In default, that will save on the `.logs` folder
-    logs_dir: str = ".logs" # !! NOTE: Can only set in config fucntion.
-
-    # Whether to save function inputs
-    # In function, this is parameters
+    # Persistence behavior
+    # Basic configuration
     save_inputs: bool = True
-
-    # Whether to save function results
-    # If the function is not return any value, will save the empty data object.
     save_result: bool = True
+    save_to    : str  = ".codetrace" # !! NOTE: Can only be set in config function.
 
-    # Default directory to save each function output.
-    # Ex: inputs, results, time consume, etc.
-    save_to: str = ".codetrace" # !! NOTE: Can only set in config function.
-
-    # Default file name with input data persistence
-    # This config only effect the file name, not the format
-    inputs_file_name: str = "inputs"
-
-    # Default file name with each function data persistence, uses the first name in default
-    # If the decorator includes compare function, will uses the seconde file name to persistence
+    # Filename configuration
+    inputs_file_name: str       = "inputs"
     result_file_name: List[str] = field(default_factory=lambda: ["original_result", "new_function_result"])
 
     # Default persistence data format
-    # Current only support pickle
-    data_format: SupportedType = SupportedType.PICKLE # !! NOTE: Can only set in config function.
-    
-    # TODO: Can support each function with different format
-    # TODO: Can support different format on inputs and results
+    data_format: SupportedType = SupportedType.PICKLE # !! NOTE: Can only be set in config function.
+    # TODO: Support different formats for each function.
+    # TODO: Support different formats for input and results.
 
-    # The sub-path is generate by first times function call, it's under the `save_to`
-    # Ex: .codetrace/TIMESTAMP/
+    # Summary Configuration
+    with_summary: bool = True        # !! NOTE: Can only be set in config function.
+    summary_dir : str  = "summarys"  # !! NOTE: Can only be set in config function.
+
+    # Internal path management. Private attributes
     _sub_path: str = field(default="", repr=False) # !! NOTE: This variable cannot be changes.
     @property
     def sub_path(self) -> str:
+        """Gets the execution sub-path (usually the timestamp directory)"""
         return self._sub_path
     @sub_path.setter
     def sub_path(self, value: str):
+        """Sets the sub-path. Can only be set once (final-like behavior)
+
+        Args:
+            value (str): The string path to set.
+
+        Raises:
+            AttributeError: If an attempt is made to change a path that has
+                            already been initialized.
+        """
         if self._sub_path != "":
-            raise AttributeError("The value `sub_path` is a final attribute variable.")
+            raise AttributeError("The \"sub_path\" attrobite os foma; amd cammpt be modified once set.")
         self._sub_path = value
 
-    # The excuted summary and record.
-    # This will save into a file and print when exit the program.
-    with_summary: bool = True # !! NOTE: Can only set in config function.
-
-    # Default dirs the summary save into path
-    # The all summary will save into this path and name with {timestamp}.json
-    summary_dir: str = "summarys" # !! NOTE: Can only set in config function.
 
     def copy(self) -> "CodeTraceConfig":
-        """Copy function
+        """Creates a deep copy of the current configuration.
 
-        Ensuring the outside any operation will not effect the main config value.
-        
+        This ensures that modifications to the copied object do not affect
+        the original global configuration.
+
         Returns:
-            Object (CodeTraceConfig): An after deepcopy `CodeTraceConfig` Objects.
+            CodeTraceConfig: A new `CodeTraceConfig` instance with identical values.
         """
         return copy.deepcopy(self)
