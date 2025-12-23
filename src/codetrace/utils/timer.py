@@ -1,48 +1,56 @@
 # -*- coding: utf-8 -*-
-"""Timer for function/code_block execute time
+"""Timer utilities for measuring function and code block execution time.
 
-This module will calcutor the function or code block execting time.
+This module provides high-preision timing capabilities using time.pref_counter
+to measure the wall-clock duration of executable objects.
 """
 
 import time
 
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Tuple, TypeVar
 from datetime import datetime
 
+# Define a TypeVar to preserve the return type of the decorated function.
+_T = TypeVar("_T")
+
 class CodeTraceTimer:
-    """CodeTrace Timer
-    """
+    """Provides static methods for measuring execution metrics."""
 
     @staticmethod
     def measure_time(
-        func: Callable[..., Any],
+        func: Callable[..., _T],
 
-        *args,
-        **kwargs
-    ) -> Tuple[Any, datetime, datetime, float]:
-        """Measure Time for function consume
+        *args   : Any,
+        **kwargs: Any
+    ) -> Tuple[_T, datetime, datetime, float]:
+        """Measures the execution time and duration of a given function.
 
         Args:
-            func (Callable[..., Any]): The function need to be execute
-
-            *args    (Any): Args...
-            **kwargs (Any): Kwargs...
+            func (Callable[..., _T]): The function or callable to execute.
+            *args    (Any): Positional arguments to pass to the function.
+            **kwargs (Any): Keyword    arguments to pass to the function.
 
         Returns:
-            Tuple[Any, datetime, datetime, float]: A tuple containing
-                - original result
-                - start time
-                - end time
-                - execution duration in seconds
+            Tuple[_T, datetime, datetime, float]:
+                - The original result of the function.
+                - The wall-clock start time (datetime).
+                - The wall-clock end time (datetime).
+                - The execution duration in seconds (float) using `perf_counter`.
 
-        Example:
-            >>> CodeTraceTimer.measure_time()
+        Examples:
+            >>> def my_func(x):
+            >>>     return x * 2
+            >>> 
+            >>> 
+            >>> result, start, end, duration = CodeTraceTimer.measure_time(
+            >>>     my_func, 10
+            >>> )
         """
 
         time_start: datetime = datetime.now()
         func_start: float    = time.perf_counter()
 
-        results: Any = func(*args, **kwargs)
+        results: _T = func(*args, **kwargs)
 
         func_end: float    = time.perf_counter()
         time_end: datetime = datetime.now()
