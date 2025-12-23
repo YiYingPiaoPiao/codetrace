@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Recorder utils
+"""Recorder utilities for post-execution analysis.
 
-Will process recoder output and visalize the results
-when exit the program.
+This modules provides the Recorder class which captures execution metadata
+and handles automatic summary generation or custom callback execution
+when the Python interpreter exits.
 """
 
 import os
@@ -10,39 +11,39 @@ import json
 import atexit
 
 from enum import Enum
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .config import CodeTraceConfig
 
 class TraceType(Enum):
-    """All Trace Type of this Library
+    """Enumeration of supported trace types.
 
-    This value prevent the record is call with what type
+    Attributes:
+        FUNCTION: Repersents a record originating from a function execution.
     """
-    FUNCTION = 'function'
+    FUNCTION = "function"
 
 class Recorder:
-    """CodeTrace Recorder
+    """Handles the recording and persistence of execution summaries.
 
-    This is a class for recorder.
-    Mainly is print and log summary on program exists.
-
-    The file will save into the json format file.
+    This class acts as a central registry for all execution traces. It can be
+    configured to either save standard JSON summary or trigger a custom callback
+    upon program termination using the `atexit` module.
     """
 
-    # The list of the record, each index is a record.
-    _records: List = [] 
+    # Private class-level storage for execution records.
+    _records: List[Dict[str, Any]] = []
 
-    # This parameter will record is successful to register or not
+    # Tracks whether the exit handler has been registered whit atexit.
     _registered: bool = False
 
-    # The callback function when exit programe to process
+    # Optional user-defined callback for custom summary processing.
     _callback: Optional[Callable[[List[Dict]], None]] = None
 
-    # To determine the log is enable or not, this config includes log to console and save to json two function.
+    # Global toggle for the recording functionality
     _enable: bool = True # Default is True
 
-    # The summary saving path, default is "summarys"
+    # Output directory for summary files.
     _dirs = CodeTraceConfig.summary_dir
 
     
@@ -53,15 +54,12 @@ class Recorder:
         dirs  : Optional[str ] = None,
         enable: Optional[bool] = None
     ):
-        """Config the Summary propertity
-
-        This function will let user config and customize the recorder action.
+        """Configuration the recorder settings.
 
         Args:
-            dirs   (str) :
-            enable (bool):
+            dirs   (Optional[str] ): The directory path where summary files will be saved.
+            enable (Optional[bool]): Whether to enable the recorder functionality.
         """
-
         if dirs is not None:
             cls._dirs = dirs
 
@@ -78,10 +76,7 @@ class Recorder:
         record    : Dict,
         trace_type: TraceType
     ):
-        """Append function of Recorder
-
-        This function is append record into a list
-        the is a cache, that will calcutor on exit.
+        """Appends a new execution record to the internal cache.
 
         The record will save follow below format:
         >>> {
@@ -91,17 +86,18 @@ class Recorder:
         >>> }
 
         Args:
-            func_name (str) : The calling function name, for easy to search after program run.
-            record    (Dict): An dict record, can customize the dict struct. The record content will return from callback
-                                function from main flow.
+            func_name (str) : The name of the function associated with the record.
+            record    (Dict): A dictionary containing the metrics/data to record.
 
-            trace_type (TraceType): An enum, for record current record is from which type to append.
+            trace_type (TraceType): The category of the trace (e.g., FUNCTION).
 
         Raises:
-            TypeError: When the record format is not a dict, this function will raise the error.
+            TypeError: If the `record` parameter is not a dictionary.
         """
         if not isinstance(record, dict):
-            raise TypeError("The \"reocrd\" type is not a dict, please ensure your function return correct type of record.")
+            raise TypeError(
+                f"Expected \"record\" to be a dict, but got {type(record).__name__}"
+            )
 
         # Append the struct param into the record.
         cls._records.append({
@@ -114,10 +110,11 @@ class Recorder:
 
     @classmethod
     def exit_handler(cls):
-        """Recorder Exiting Handler
+        """Processes collected records when the program exits.
 
-        This function will process when the program on exit
-        """
+        This method is automatically called by the `atexit` module. It will
+        either execute a custom callback or save the records to a JSON file.
+        """ 
 
         if not cls._enable:
             return
@@ -127,39 +124,50 @@ class Recorder:
 
             return  # No exec default function
         
-        # Default action when exit the program
-        # The function will save the record into a json format output file
+        # Default behavior: Save to JSON summary.
         summary = {
             "total"  : len(cls._records),
             "details": cls._records
         }
 
-        file_name: str = os.path.join(cls._dirs, "summary.json")
-        with open(file_name, 'w', encoding='UTF-8') as f:
-            json.dump(
-                obj = summary, 
-                fp  = f,
+        # Ensure the output directory exists before writing.
+        if not os.path.exists(cls._dirs):
+            os.makedirs(cls._dirs, exist_ok=True)
 
-                ensure_ascii = False,
-                indent       = 4
-            )
+        file_name: str = os.path.join(cls._dirs, "summary.json")
+
+        try:
+            with open(file_name, 'w', encoding='UTF-8') as f:
+                json.dump(
+                    obj = summary, 
+                    fp  = f,
+
+                    ensure_ascii = False,
+                    indent       = 4
+                )
+        except IOError:
+            # Fallback to console if file writing fails during exit.
+            print(f"\n[CodeTrace] Failed to save summary to {file_name}")
 
     
     @classmethod
-    def register_exit(cls, callback: Optional[Callable] = None):
-        """Register Exit Event
+    def register_exit(
+        cls,
+        callback: Optional[Callable[[List[Dict[str, Any]]], None]] = None
+    ) -> None:
+        """Registers the recorder to perform actions on program exit.
 
         Args:
-            cls      (class)   : This object slef.
-            callback (Callable): Callback when exit program process, default is simply handler.
+            callback (Callable): An optional function to handle records upon exit. If 
+                            provided, it replaces the default JSON saving behavior.
 
         Raises:
-            TypeError: Given an invalid funcation
+            TypeError: If the provided callback is not callable.
         """
 
         # Check if the callback function is valid
         if callback is not None and not callable(callback):
-            raise TypeError("Pass an invalid callable function.")
+            raise TypeError("The provided callback must be a callable.")
         
         if callback is not None:
             cls._callback = callback
@@ -167,3 +175,5 @@ class Recorder:
         if not cls._registered:
             atexit.register(cls.exit_handler)
             cls._registered = True
+
+            

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""TraceFunc decorators modules.
+"""TraceFunc decorators modules for function instrumentation.
 
-A decorator for tracing function calls
+This module provides the TraceFunc class, which can be used as a decorator
+to trace function execution, log durations, and persist inputs/outputs.
 """
 
 import os
@@ -19,24 +20,20 @@ from ..utils.recorder import Recorder, TraceType
 from ..persistence.data_persistence import DataPersistence, SupportedType
 
 
-
 class TraceFunc:
-    """A function tracing class.
-    
-    This is for tracing function.
+    """A decorator class for tracing and recording function execution.
 
-    Example:
-        >>> @trace_func()
-        >>> def your_func():
-        >>>     # TODO
-        >>>     pass
+    This class provides a configurable way to log function calls, measure
+    execution time, and save input/output data for debugging or auditing.
+
+    Attributes:
+        logger (logging.Logger): The logger instance used for reporting.
     """
 
     def __init__(self) -> None:
-        """Initialize the TraceFunc decorator with default configurations.
-        """
+        """Initializes the TraceFunc with default configurations."""
 
-        # By default, set the logger to None
+        # By default, the logger is set to `None`
         self.logger: Optional[logging.Logger] = None
         self._default_config: CodeTraceConfig = CodeTraceConfig()
 
@@ -65,12 +62,23 @@ class TraceFunc:
         # Logger, can pass custom logger object to replace default logger object.
         logger: Optional[logging.Logger] = None
     ) -> None:
-        """
-        Docstring for config
-        
+        """Updates the global configuration for the trace
+
         Args:
+            with_logs        (Optional[bool]          ): Whether to enable logging output.
+            save_logs        (Optional[bool]          ): Whether to write logs to a file.
+            logs_dir         (Optional[str]           ): Directory for log files.
+            save_inputs      (Optional[bool]          ): Whether to persist function input arguments.
+            save_result      (Optional[bool]          ): Whether to persist function return values.
+            save_to          (Optional[str]           ): Root directory for all persistence data.
+            inputs_file_name (Optional[str]           ): Filename  for saved inputs.
+            result_file_name (Optional[List[str]]     ): Filenames for saved results.
+            data_format      (Optional[SupportedType] ): The serialization format to use (e.g., PICKLE)
+            with_summary     (Optional[bool]          ): Whether to generate a summary at the end.
+            summary_dir      (Optional[str]           ): Directory for summary files.
+            logger           (Optional[logging.Logger]): Custom logger instance to override the default.
         """
-        # Customize configurations
+
         updates = {
             "with_logs": with_logs,
             "save_logs": save_logs,
@@ -93,15 +101,14 @@ class TraceFunc:
             if value is not None:
                 setattr(self._default_config, key, value)
 
-        # Declare logger level
+        # Refreshes or creates the logger based on current config.
         logger_level = logging.DEBUG if with_logs else logging.WARNING
         if logger:
-            # If pass the logger object, then use it.
+            # If a logger object is passed, use it.
             self.logger = logger
 
         else:
-            # When already exists logger then re-use the logger
-            # Else create a new logger object by default config.
+            # Re-initialize logger if settings changed or logger doesn't exist
             self.logger = (
                 self.logger or setup_logger(
                     level   = logger_level, 
@@ -112,8 +119,7 @@ class TraceFunc:
             self.logger.setLevel(logger_level)
 
         if with_logs is not None or save_logs is not None or logs_dir is not None:
-            # When updated new config in logger
-            # setup new logger to use.
+            # Remove all logger handler
             for handler in self.logger.handlers[:]:
                 self.logger.removeHandler(handler)
 
@@ -135,47 +141,57 @@ class TraceFunc:
         inputs_file_name: Optional[str]       = None,
         result_file_name: Optional[List[str]] = None
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Call Function logic
+        """The core decorator for TraceFunc
 
-        This fucntion will executes when using this decorator
+        This method allows the instance to be used as a decorator
+        with optional overrides.
+
+        Args:
+            with_logs        (Optional[bool]     ): Whether to enable logging output.
+            save_inputs      (Optional[bool]     ): Whether to persist function input arguments.
+            save_result      (Optional[bool]     ): Whether to persist function return values.
+            inputs_file_name (Optional[str]      ): Filename  for saved inputs.
+            result_file_name (Optional[List[str]]): Filenames for saved results.
+
+        Returns:
+            A decorator function that wraps the target function.
 
         Example:
             >>> @trace_func()
             >>> def my_func():
             >>>     #TODO
-            >>>     pass
+            >>>     return value
         """
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            """Mainly decorator for TraceFunc
+            """The main decorator for `TraceFunc`
 
-            This decorator will trace the function excutes time
-            and save inputs and results when it's enable.
+            Enabling this decorator will track the execution time
+            of the function and save the input and results.
 
-            Otherwise, this function also will excutes that
-            function provices by user, and compare two function
-            results using the compare function.
+            Additionally, this decorator will execute the user-provided
+            function and compare the results of the two functions using
+            a comparison function.
 
-            In the default compare function, will comapre
-            two results md5 to verfity the results is same or not.
+            In the default comparison function, the MD5 values of the 
+            two results will be used to verfiy that they are the same.
 
             Args:
-                func (Callable[..., Any]): The function which decorator to.
+                func (Callable[..., Any]): The function that the decorator will execute.
 
             Returns:
+                Wrapper (Callable[..., Any]): The decorator.
             """
             @functools.wraps(func)
             def wrapper(*args, **kwargs) -> Any:
-                """The wrapper
-                """
+                """Main Wrapper"""
 
-                ## Step 1: Local config -> This run local config.
-                # Define a "CodeTraceConfig" object in each run
-                # Ensure all special config not effect to global config value.
-                _config: CodeTraceConfig = self._default_config.copy() # Copy the original `_default_config` value, avoid None value to execute.
+                ## Step 1: Local config -> This run uses the local configuration.
+                # Define a "CodeTraceConfig" object for each run.
+                # Ensure that all special configuration do not affect global configuration values.
+                _config: CodeTraceConfig = self._default_config.copy()
 
-                # Below is update the current config to temp config.
-                # Maybe the code look like stupid, but this for readability.
-                # NOTE: Represent the use not set special value for this run when the value is None.
+                # The following code updates the current configuration to a temporary configuration.
+                # NOTE: When the value is None, it means no special value was set for this times.
                 if with_logs is not None:
                     _config.with_logs = with_logs
                 if save_inputs is not None:
@@ -187,35 +203,37 @@ class TraceFunc:
                 if result_file_name is not None:
                     _config.result_file_name = result_file_name
 
-                assert self.logger is not None # !! Make PyLance stop hit error (Actually have other better method, but I lazy)
-                _original_logger_level = self.logger.level # Store the original logger level to safely reset the logger level.
+                assert self.logger is not None # !! Stop PyLance from throwing errors (there's actually a better way, but I'm lazy)
+                _original_logger_level = self.logger.level # Store the original log level for safely reset the log level.
                 
                 if _config.with_logs is not None:
-                    # Ensure stay original config when the decorator haven't pass any logs relate value.
+                    # When the decorator does not pass any log-related values
+                    # Ensure that the original configuration is maintained.
                     self.logger.setLevel(
                         logging.DEBUG if _config.with_logs else logging.WARNING
                     )
 
-                # Local variable
+                # Local variables
                 func_name: str = func.__name__
                 timestamp: str = datetime.now().strftime(TIMESTAMP_FORMAT)
 
-                self.logger.info("Execute function: %s @ %s.", func_name, timestamp)
 
-                ## Step 2: Determind target saving path is exists and valid or not.
-                # Create a new folder when it does't exists
-                if not os.path.isdir(_config.save_to):
-                    # The top level saving path, all result will saved under this folder
-                    os.makedirs(os.path.join(os.getcwd(), _config.save_to), exist_ok=True)
-                parent_path: str = str(Path(_config.save_to).resolve())
+                ## Step 2: Determine if the target save path exists and is valid.
+                # If the target folder does not exists, create a new folder.
+                save_root: Path = Path(_config.save_to).resolve()
+                if not _config.sub_path:
+                    # Initialize sub_path if first time
+                    sub_path: Path = save_root / TIMESTAMP
+                    sub_path.mkdir(parents=True, exist_ok=True)
 
-                # Sub-directory for each run, Using start timastamp to split
-                # This `TIMESTAMP` is generated by first import module operation
-                if _config.sub_path == "":
-                    _config.sub_path =\
-                        self._default_config.sub_path =\
-                            os.path.join(parent_path, TIMESTAMP)
-                    os.makedirs(_config.sub_path, exist_ok=True)
+                    # Setting up the sub_path to configurations.
+                    _config.sub_path = str(sub_path)
+                    self._default_config.sub_path = str(sub_path)
+
+                # Generate current run path
+                current_path_Path: Path = Path(_config.sub_path) / func_name / timestamp
+                current_path_Path.mkdir(parents=True, exist_ok=True)
+                current_path: str = str(current_path_Path)
 
                 # Recorder Configuration
                 Recorder.config(
@@ -223,43 +241,37 @@ class TraceFunc:
                     enable = _config.with_summary
                 )
 
-                # Create a folder for this times this function execute.
-                current_path: str = os.path.join(_config.sub_path, func_name, timestamp)
-                os.makedirs(current_path, exist_ok=True)
-
-                self.logger.info("This run all outputs will saved to: %s", current_path)
+                self.logger.info("Execute function: %s @ %s.", func_name, timestamp)
+                self.logger.info("All outputs from this run will be saved to: %s", current_path)
                 
-                ## Step 3: If enable save input parameters
-                # The saving operation should not be effect main flow
-                # Using try block ensure the result also can return to user.
-                # Only record the error in the recorder and log
+                ## Step 3: Enable Saving Input Parameters
+                # The save operation should not affect the main flow.
+                # Use a try block to ensure that the result is also returned to the user.
+                # Only log errors in the logger.
                 if _config.save_inputs:
-                    # NOTE: try...catch are implements on next module
-                    # For safely, also try on this code block.
                     try:
                         DataPersistence.save_function_inputs(
                             parent_path = current_path,
                             file_name   = _config.inputs_file_name,
                             function    = func,
-                            format      = _config.data_format,
+                            format_type = _config.data_format,
 
                             logger = self.logger,
 
                             func_args   = args,
-                            func_kawrgs = kwargs
+                            func_kwargs = kwargs
                         )
                     except Exception:
-                        self.logger.error("Error processing with save %s input parameters.", func_name, exc_info=True)
+                        self.logger.exception("Failed to save inputs for %s.", func_name)
 
-                ## Step 4: Execute the user logic code.
+                ## Step 4: Excute user logic code.
                 # The excute function will return:
-                #   - Results   : User's expected results, always same as not decorator.
-                #   - Time Start: Function executed starting time
-                #   - Time End  : Function finished executed end time, will no return if raise any error in function.
-                #   - Duration  : Function executing time
-                exception: Optional[Exception] = None # Define an exception variable for more judge.
+                #   - Results   : The result expected by the user, always the same as the result returned by the *not* decorator.
+                #   - Time Start: The time when the function begins execution.
+                #   - Time End  : The time when the function finishes excution. If any error occrus in the function, it will not return any value.
+                #   - Duration  : The execution time of the function.
+                exception: Optional[Exception] = None # Define an exception variable for further judgment.
                 try:
-                    # Use the measure time to calcutor duration and get results.
                     results, time_start, time_end, duration = CodeTraceTimer.measure_time(func, *args, **kwargs)
 
                     # Logging the information
@@ -280,36 +292,36 @@ class TraceFunc:
                                     )
                     
                     # Reset the logger level to original logger level
-                    # To prevent this decorator effect main stream logger.
+                    # To prevent this decorator from affecting mainstream loggers.
                     self.logger.setLevel(_original_logger_level)
                     raise
 
 
                 ## Step 5: Save the exection results
-                # Same as saving function inputs
-                # Only log the error information on runtime
-                # Make sure this flow will not effect the main logic
+                # Same as saving function input
+                # Only log error information at runtime
+                # Ensure this process does not affect the main logic.
                 if _config.save_result and exception is None:
-                    # exception is None equal not Error and with results
+                    # An exception of None means there is a result and no error is repoted.
                     try:
                         DataPersistence.save_function_result(
                             parent_path = current_path,
                             file_name   = _config.result_file_name[0],
                             func_name   = func_name,
-                            format      = _config.data_format,
+                            format_type = _config.data_format,
 
                             logger = self.logger,
                             result = results
                         )
 
                     except Exception:
-                        self.logger.error("Error processing with save %s output results.", func_name, exc_info=True)
+                        self.logger.exception("Failed to save results for %s.", func_name)
 
 
-                ## Step 6: Record the Execution record into recorder
-                # A basic record
-                # This logic will save the running duration, start-time, end-time to a dict format.
-                # TODO: Abstract the logic to a function, and let user can pass a callback function.
+                ## Step 6: Write the execution record to the logger
+                # Basic record
+                # This logic saves the execution duration, start time, and end time as a dictinory.
+                # TODO: Abstract the logic into a function and allow users to pass a callback function.
                 record = {
                     "duration"  : duration,
                     "time-start": time_start,
@@ -321,7 +333,7 @@ class TraceFunc:
                     trace_type = TraceType.FUNCTION
                 )
 
-                ## Done execution: reset all config to default mode.
+                ## Done: All configuration are reset to default mode.
                 # Set the logger to default level.
                 self.logger.setLevel(_original_logger_level)
 
