@@ -59,7 +59,7 @@ class TraceFunc:
         with_summary: Optional[bool] = None,
         summary_dir : Optional[str ] = None,
 
-        # Logger, can pass custom logger object to replace default logger object.
+        # Logger: allows passing a custom logger to override the default one.
         logger: Optional[logging.Logger] = None
     ) -> None:
         """Updates the global configuration for the trace
@@ -97,18 +97,18 @@ class TraceFunc:
             "summary_dir" : summary_dir
         }
         for key, value in updates.items():
-            # Only update non-None objects, regardless of whether the parameter is the same as the old parameter.
+            # Only non-None parameters are updated, regardless of whether their values differ from the existing ones.
             if value is not None:
                 setattr(self._default_config, key, value)
 
-        # Refreshes or creates the logger based on current config.
+        # The logger is created or refreshed based on the current configuration.
         logger_level = logging.DEBUG if with_logs else logging.WARNING
         if logger:
-            # If a logger object is passed, use it.
+            # If a logger instance is provided, it will be used directly.
             self.logger = logger
 
         else:
-            # Re-initialize logger if settings changed or logger doesn't exist
+            # The logger is re-initialized if the configuration changes or if no logger exists.
             self.logger = (
                 self.logger or setup_logger(
                     level   = logger_level, 
